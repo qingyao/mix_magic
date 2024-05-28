@@ -51,14 +51,44 @@ Future<Database> initializeDb() async {
 //   await db.insert('Recipe', {'name': 'Recipe Sample'});
 // }
 
-Future<List<int>> getRecipesByIngredient(Database db, String ingredient) async {
-  var ingredientId = hashStringToInt(ingredient.toLowerCase());
-  var recipes = await db.query('recipe', where: 'ingredient_id=?', whereArgs: [ingredientId]);
-  var recipe_ids = <int>[];
-  for (var recipe in recipes){
-    recipe_ids.add(recipe['recipe_id'] as int);
+Future<Set<int>> getRecipesByIngredients(Database db, Set<String> ingredients) async {
+  print(ingredients);
+  List<int> ingredientIds = [];
+  for (var ingredient in ingredients) {
+    var ingredientId = hashStringToInt(ingredient.toLowerCase());
+    ingredientIds.add(ingredientId);
   }
-  return recipe_ids;
+  
+  var recipes = await db.query('mixmatch', 
+        where: 'ingredient_id IN (${List.filled(ingredientIds.length, '?').join(',')})', 
+        whereArgs: ingredientIds);
+
+  var recipeIds = <int>{};
+  for (var recipe in recipes){
+    recipeIds.add(recipe['recipe_id'] as int);
+  }
+  return recipeIds;
+}
+// Future<List> getRecipeDetail()
+
+
+Future<String> getRecipeName(Database db, int recipeId) async {
+  
+  var recipes = await db.query('recipe_detail', 
+          where: 'recipe_id=?', 
+          whereArgs: [recipeId]);
+          
+  return recipes[0]['recipe_title'] as String;
+}
+
+Future<List<String>> getAllIngredients(Database db) async {
+  var ingredients = await db.query('ingredient');
+  var listIngredients = <String>[];
+  for (var ingredient in ingredients) {
+    var tmp = ingredient['ingredient_name'] as String;
+    listIngredients.add(tmp.toLowerCase());
+  }
+  return listIngredients;
 }
 
 Future<List<Map<String, dynamic>>> getRecipes(Database db) async {
@@ -71,7 +101,7 @@ void main() async {
   // var newPath = join(documentsDirectory.path, '/created.db');
   // var newPath = await getDatabasesPath();
   
-  final db = await initializeDb();
+  Database db = await initializeDb();
   
   // Insert an example item
   // try {
@@ -83,25 +113,30 @@ void main() async {
 
   // Retrieve and print items
   try {
-    final items = await getRecipesByIngredient(db, 'canola oil');
+    final items = await getRecipesByIngredients(db, {'canola oil'});
     print('Recipe Ids: $items');
   } catch (e) {
     print('Error retrieving Recipe: $e');
   }
 
-  runApp(const MyApp());
+  runApp(MyApp(db:db));
 }
 
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final Database db;
+  const MyApp({super.key, required this.db});
 
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
 
-    return ChangeNotifierProvider(
-      create: (context) => MyAppState(),
+    return MultiProvider(
+      
+      providers:[
+        ChangeNotifierProvider(create: (context) => MyAppState(),),
+        ChangeNotifierProvider(create: (context) => DatabaseProvider(db))
+      ] ,
       child: MaterialApp(
         title: 'Mix Magic',
         theme: ThemeData(
@@ -134,8 +169,17 @@ class _MyHomePageState extends State<MyHomePage> {
       builder: (context, constraints) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Mix Magic'),
-          ),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            elevation: 0,
+            title: Container(
+              padding: const EdgeInsets.all(10),
+              child:  Text('Mix Magic',
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onPrimary,
+                        ),
+                )
+              )
+            ),
           body: 
               Container(
                   color: Theme.of(context).colorScheme.primaryContainer,
@@ -160,21 +204,51 @@ class _GeneratorPageState extends State<GeneratorPage> {
   List<int> ids = [];
   List<String> names = [];
   List<String> images = [];
-  var counter = 1;
+  List<String> listIngredients = [];
+  bool listIngredientInitialized = false;
+  
+  Future<void> _initializeAsyncDependencies(Database db) async {
+    // Fetch the database from the context after the first build
+    final tmp = await getAllIngredients(db);
+    print(tmp);
 
-  void _addNewId() {
+    // Perform your asynchronous operation with the database
+    // Update the state with the fetched data
     setState(() {
-      // Add a new ID (for example purposes, using a timestamp)
-      ids.add(counter++);
-      names.add('Recipe');
-      images.add('assets/example.png');
+      listIngredients = tmp;
+      listIngredientInitialized = true;
     });
   }
-  
   @override
   Widget build(BuildContext context) {
     String stateData = "Initial state";
+    
+    final db = Provider.of<DatabaseProvider>(context).database;
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (! listIngredientInitialized ){
+        _initializeAsyncDependencies(db);
+      }
+    }
+    );
 
+    var appState = context.watch<MyAppState>();
+
+    void _updateId () async {
+      images = [];
+      names = [];
+      print("I'm updating!");
+      var recipeIds = await getRecipesByIngredients(db, appState.selection);
+      for (var recipeId in recipeIds) {
+        var recipeName =  await getRecipeName(db, recipeId);
+        setState(() {
+          names.add(recipeName);
+          images.add('assets/example.png');
+        });
+      }  
+    }
+
+    
     return SafeArea(
       child: Column(
         children: [
@@ -187,7 +261,7 @@ class _GeneratorPageState extends State<GeneratorPage> {
              ),
             ],
           ),
-          const IngredientRow(),
+          IngredientRow(onChangeSelection: _updateId, listIngredients: listIngredients,),
           const SizedBox(height: 50,),
           const Row(
             mainAxisAlignment:MainAxisAlignment.center,
@@ -195,23 +269,24 @@ class _GeneratorPageState extends State<GeneratorPage> {
             Text('Recipe'),
             ],
           ),
-          Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: ElevatedButton(
-                onPressed: _addNewId,
-                child: const Text('Add New ID'),
-              ),
-            ),
+          // Padding(
+          //     padding: const EdgeInsets.all(8.0),
+          //     child: ElevatedButton(
+          //       onPressed: _addNewId,
+          //       child: const Text('Add New ID'),
+          //     ),
+          //   ),
           Expanded(
               child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, // Number of columns
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 200,
+                  // crossAxisCount: 2, // Number of columns
                   mainAxisSpacing: 20, // Spacing between rows
                   crossAxisSpacing: 20, // Spacing between columns
-                  childAspectRatio: 0.85, // Width to height ratio of the grid items
+                  childAspectRatio: 0.8, // Width to height ratio of the grid items
                 ),
                 padding: const EdgeInsets.all(30),
-                itemCount: ids.length,
+                itemCount: names.length,
                 itemBuilder: (context, index) {
                   return Column(
                     children: [
@@ -224,11 +299,17 @@ class _GeneratorPageState extends State<GeneratorPage> {
                         ),
                         onPressed: () {
                           // Handle button press
+
+                          // var recipe_detail = await getRecipeDetail(recipeIds[index]);
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => RecipePage()),
+                            MaterialPageRoute(builder: (context) => RecipePage(),
+                            // settings: const RouteSettings(
+                            //   arguments: {recipe_detail},
+                            // ),
+                            ),
                           ).then((value){
-                            // to persist the state or change it when coming back
+                            // is triggered when coming back Nagivator.pop(context, value)
                             setState(() {
                               stateData = value ?? stateData;
                             });
@@ -242,7 +323,7 @@ class _GeneratorPageState extends State<GeneratorPage> {
                             fit: BoxFit.cover,),
                         )
                       ),
-                      Text(names[index]),
+                      Expanded(child: Text(names[index])),
                     ],
                   );
                 },
@@ -264,6 +345,7 @@ class RecipePage extends StatelessWidget {
       canPop: false,
       child: Scaffold(
         appBar: AppBar(
+          backgroundColor: Theme.of(context).colorScheme.primary,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
@@ -274,7 +356,9 @@ class RecipePage extends StatelessWidget {
           padding: const EdgeInsets.all(10),
           child: Text(
             'Tom ka gai',
-            style: Theme.of(context).textTheme.headlineMedium,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
           ),
         ),
       ),
@@ -307,13 +391,18 @@ class RecipePage extends StatelessWidget {
 }
 
 class IngredientRow extends StatelessWidget {
+  final Function() onChangeSelection;
+  final List<String> listIngredients;
+
   const IngredientRow({
     super.key,
+    required this.onChangeSelection,
+    required this.listIngredients
   });
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       mainAxisSize: MainAxisSize.max,
       children: <Widget>[
         SizedBox(width: 20),
@@ -323,7 +412,9 @@ class IngredientRow extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center, // not to take all available horizontal space
                     children:  <Widget>[
                       
-                      AutocompleteBasicExample(), // Example widget from the link
+                      AutocompleteBasicExample(onChangeSelection: onChangeSelection, 
+                      listIngredients: listIngredients,
+                      fieldId: 0,), // Example widget from the link
                     ],
                   ),
          ),
@@ -334,7 +425,9 @@ class IngredientRow extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center, // not to take all available horizontal space
                     children:  <Widget>[
                       
-                      AutocompleteBasicExample(), // Example widget from the link
+                      AutocompleteBasicExample(onChangeSelection: onChangeSelection, 
+                      listIngredients: listIngredients,
+                      fieldId: 1), // Example widget from the link
                     ],
                   ),
          ),
@@ -353,11 +446,18 @@ class MyAppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  var selectionMap = <int,String>{};
   var selection = <String>{};
-  void passSelected (selected) {
-    selection.add(selected);
-    debugPrint(selection.toList().join(','));
+  void passSelected (fieldId, selected) {
+    selectionMap[fieldId]=selected;
+    selection = selectionMap.values.toSet();
+    debugPrint(selection.join(','));
+    // _triggerRefresh();
   }
+
+  // void _triggerRefresh() {
+  //   print('AppState property changed to');
+  // }
 }
 
 class BigCard extends StatelessWidget {
@@ -392,14 +492,21 @@ class BigCard extends StatelessWidget {
 }
 
 class AutocompleteBasicExample extends StatelessWidget {
-  const AutocompleteBasicExample({super.key});
-  
-  static const List<String> _kOptions = <String>[
-    'broccoli',
-    'chicken',
-    'tofu',
-  ];
+  final Function() onChangeSelection;
+  final List<String> listIngredients;
+  final int fieldId;
 
+  const AutocompleteBasicExample({super.key, 
+                required this.onChangeSelection,
+                required this.listIngredients,
+                required this.fieldId});
+  
+  // static const List<String> _kOptions = <String>[
+  //   'broccoli',
+  //   'chicken',
+  //   'tofu',
+  // ];
+  // final List<String> _kOptions = listIngredients;
   
   @override
   Widget build(BuildContext context) {
@@ -409,13 +516,14 @@ class AutocompleteBasicExample extends StatelessWidget {
         if (textEditingValue.text == '') {
           return const Iterable<String>.empty();
         }
-        return _kOptions.where((String option) {
+        return listIngredients.where((String option) {
           return option.contains(textEditingValue.text.toLowerCase());
         });
       },
       onSelected: (String selected) {
-        // debugPrint('You just selected $selection');
-        appState.passSelected(selected);
+        
+        appState.passSelected(fieldId, selected);
+        onChangeSelection();
       },
     );
   }
@@ -427,4 +535,12 @@ int hashStringToInt(String name) {
   String hexSubString = md5Hash.toString().substring(0,6);
   int converted = int.parse(hexSubString, radix:16);
   return converted;
+}
+
+class DatabaseProvider with ChangeNotifier {
+  final Database database;
+
+  DatabaseProvider(this.database);
+
+  // Additional methods to interact with the database can be added here.
 }

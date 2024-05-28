@@ -9,11 +9,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mix_magic/main.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart';
 
+Future<Database> initializeDb() async {
+  final documentsDirectory = await getApplicationDocumentsDirectory();
+  final path = join(documentsDirectory.path, 'example.db');
+  
+  return openDatabase(
+    path,
+  );
+}
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
+    Database db  = await initializeDb();
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(MyApp(db:db));
 
     // Verify that our counter starts at 0.
     expect(find.text('0'), findsOneWidget);
