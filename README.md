@@ -6,7 +6,10 @@ This is a multi-platform App (tested for iOS and Chrome) to perform multiple ing
 With input of ingredients, the App shows the recipes with image title and cooking time dynamically and features selection and expansion of the entire recipe in the next page and page return for re-selection.
 
 ## Future development
-API for GPT will be connected to allow user to take a picture and generate recipe and save in the recipe database.
+- API for GPT will be connected to allow user to take a picture and generate recipe and save in the recipe database.
+- Ingredient replacement will be suggested based on a replacement table.
+- Recipe category: savory and sweet in separate views
+- Toggle master (template) recipes which tolerate ingredient replacements based on broad category.
 
 ## Technology
 Flutter framework with Dart
