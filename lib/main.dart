@@ -15,7 +15,7 @@ import 'package:path_provider/path_provider.dart';
 Future<Database> initializeDb() async {
   final documentsDirectory = await getApplicationDocumentsDirectory();
   final path = join(documentsDirectory.path, 'example.db');
-  
+
   // Delete the existing database (for development/debugging purposes)
   if (await File(path).exists()) {
     print('Deleting existing database...');
@@ -24,7 +24,8 @@ Future<Database> initializeDb() async {
 
   // Load the database from the assets
   ByteData data = await rootBundle.load('assets/data.db');
-  List<int> bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+  List<int> bytes =
+      data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
 
   // Write the database to the documents directory
   await File(path).writeAsBytes(bytes);
@@ -51,33 +52,37 @@ Future<Database> initializeDb() async {
 //   await db.insert('Recipe', {'name': 'Recipe Sample'});
 // }
 
-Future<Set<int>> getRecipesByIngredients(Database db, Set<String> ingredients) async {
+Future<List<int>> getRecipesByIngredients(
+    Database db, Set<String> ingredients) async {
   print(ingredients);
   List<int> ingredientIds = [];
   for (var ingredient in ingredients) {
     var ingredientId = hashStringToInt(ingredient.toLowerCase());
     ingredientIds.add(ingredientId);
   }
-  
-  var recipes = await db.query('mixmatch', 
-        where: 'ingredient_id IN (${List.filled(ingredientIds.length, '?').join(',')})', 
-        whereArgs: ingredientIds);
+
+  var recipes = await db.query('mixmatch',
+      where:
+          'ingredient_id IN (${List.filled(ingredientIds.length, '?').join(',')})',
+      whereArgs: ingredientIds);
 
   var recipeIds = <int>{};
-  for (var recipe in recipes){
+  for (var recipe in recipes) {
     recipeIds.add(recipe['recipe_id'] as int);
   }
-  return recipeIds;
+  return recipeIds.toList();
 }
-// Future<List> getRecipeDetail()
+Future<String> getRecipeDetail(Database db, int recipeId) async {
+  var recipes = await db
+      .query('recipe_detail', where: 'recipe_id=?', whereArgs: [recipeId]);
 
+  return recipes[0]['steps'] as String;
+}
 
 Future<String> getRecipeName(Database db, int recipeId) async {
-  
-  var recipes = await db.query('recipe_detail', 
-          where: 'recipe_id=?', 
-          whereArgs: [recipeId]);
-          
+  var recipes = await db
+      .query('recipe_detail', where: 'recipe_id=?', whereArgs: [recipeId]);
+
   return recipes[0]['recipe_title'] as String;
 }
 
@@ -91,6 +96,17 @@ Future<List<String>> getAllIngredients(Database db) async {
   return listIngredients;
 }
 
+Future<List<Ingredient>> getIngredientDetail(Database db, int recipeId) async {
+  var ingredients = await db
+      .query('recipe', where: 'recipe_id=?', whereArgs: [recipeId]);
+
+  return ingredients.map((i)=>
+    Ingredient(name:i['ingredient_name'] as String,
+    amount:i['ingredient_amount'] as double,
+    unit:i['ingredient_unit'] as String,)
+  ).toList();
+}
+
 Future<List<Map<String, dynamic>>> getRecipes(Database db) async {
   return await db.query('recipe');
 }
@@ -100,9 +116,9 @@ void main() async {
   // var documentsDirectory = await getApplicationDocumentsDirectory();
   // var newPath = join(documentsDirectory.path, '/created.db');
   // var newPath = await getDatabasesPath();
-  
+
   Database db = await initializeDb();
-  
+
   // Insert an example item
   // try {
   //   await insertRecipe(db);
@@ -119,9 +135,8 @@ void main() async {
     print('Error retrieving Recipe: $e');
   }
 
-  runApp(MyApp(db:db));
+  runApp(MyApp(db: db));
 }
-
 
 class MyApp extends StatelessWidget {
   final Database db;
@@ -130,23 +145,21 @@ class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-
     return MultiProvider(
-      
-      providers:[
-        ChangeNotifierProvider(create: (context) => MyAppState(),),
-        ChangeNotifierProvider(create: (context) => DatabaseProvider(db))
-      ] ,
-      child: MaterialApp(
-        title: 'Mix Magic',
-        theme: ThemeData(
-          
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightGreen),
-          useMaterial3: true,
-        ),
-        home: const MyHomePage(),
-      )
-    );
+        providers: [
+          ChangeNotifierProvider(
+            create: (context) => MyAppState(),
+          ),
+          ChangeNotifierProvider(create: (context) => DatabaseProvider(db))
+        ],
+        child: MaterialApp(
+          title: 'Mix Magic',
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightGreen),
+            useMaterial3: true,
+          ),
+          home: const MyHomePage(),
+        ));
   }
 }
 
@@ -163,34 +176,28 @@ class _MyHomePageState extends State<MyHomePage> {
   var selectedIndex = 0;
 
   @override
-  Widget build(BuildContext context) {  
-    
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Scaffold(
-          appBar: AppBar(
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      return Scaffold(
+        appBar: AppBar(
             backgroundColor: Theme.of(context).colorScheme.primary,
             elevation: 0,
             title: Container(
-              padding: const EdgeInsets.all(10),
-              child:  Text('Mix Magic',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onPrimary,
-                        ),
-                )
-              )
-            ),
-          body: 
-              Container(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  child: const GeneratorPage(),
-                ),
-              );
-      }
-    );
+                padding: const EdgeInsets.all(10),
+                child: Text(
+                  'Mix Magic',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onPrimary,
+                      ),
+                ))),
+        body: Container(
+          color: Theme.of(context).colorScheme.primaryContainer,
+          child: const GeneratorPage(),
+        ),
+      );
+    });
   }
 }
-
 
 class GeneratorPage extends StatefulWidget {
   const GeneratorPage({super.key});
@@ -200,13 +207,16 @@ class GeneratorPage extends StatefulWidget {
 }
 
 class _GeneratorPageState extends State<GeneratorPage> {
-  
-  List<int> ids = [];
+  List<int> recipeIds = [];
   List<String> names = [];
   List<String> images = [];
   List<String> listIngredients = [];
-  bool listIngredientInitialized = false;
+  List<Ingredient> ingredientDetail = [];
+  String stepsDetail = "";
+  // final stepsDetail = "1. wash broccoli. \n2. cook";
   
+  bool listIngredientInitialized = false;
+
   Future<void> _initializeAsyncDependencies(Database db) async {
     // Fetch the database from the context after the first build
     final tmp = await getAllIngredients(db);
@@ -219,54 +229,66 @@ class _GeneratorPageState extends State<GeneratorPage> {
       listIngredientInitialized = true;
     });
   }
+
+    void _getIngredient(Database db, int recipeId) async{
+      ingredientDetail = await getIngredientDetail(db, recipeId);
+    }
+
+    void _getSteps(Database db, int recipeId) async {
+      stepsDetail = await getRecipeDetail(db,recipeId);
+    }
+
   @override
   Widget build(BuildContext context) {
     String stateData = "Initial state";
-    
+
     final db = Provider.of<DatabaseProvider>(context).database;
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (! listIngredientInitialized ){
+      if (!listIngredientInitialized) {
         _initializeAsyncDependencies(db);
       }
-    }
-    );
+    });
 
     var appState = context.watch<MyAppState>();
 
-    void _updateId () async {
+    void _updateId() async {
+      //reset images and names
       images = [];
       names = [];
-      print("I'm updating!");
-      var recipeIds = await getRecipesByIngredients(db, appState.selection);
+      print("I'm updating recipes!");
+      recipeIds = await getRecipesByIngredients(db, appState.selection) as List<int>;
       for (var recipeId in recipeIds) {
-        var recipeName =  await getRecipeName(db, recipeId);
+        var recipeName = await getRecipeName(db, recipeId);
         setState(() {
           names.add(recipeName);
           images.add('assets/example.png');
         });
-      }  
+      }
     }
-
-    
     return SafeArea(
       child: Column(
         children: [
           const Row(
-            mainAxisAlignment:MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-             Padding(
-               padding: EdgeInsets.all(20.0),
-               child: Text('Search ingredients'),
-             ),
+              Padding(
+                padding: EdgeInsets.all(20.0),
+                child: Text('Search ingredients'),
+              ),
             ],
           ),
-          IngredientRow(onChangeSelection: _updateId, listIngredients: listIngredients,),
-          const SizedBox(height: 50,),
+          IngredientRow(
+            onChangeSelection: _updateId,
+            listIngredients: listIngredients,
+          ),
+          const SizedBox(
+            height: 50,
+          ),
           const Row(
-            mainAxisAlignment:MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-            Text('Recipe'),
+              Text('Recipe'),
             ],
           ),
           // Padding(
@@ -277,38 +299,41 @@ class _GeneratorPageState extends State<GeneratorPage> {
           //     ),
           //   ),
           Expanded(
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 200,
-                  // crossAxisCount: 2, // Number of columns
-                  mainAxisSpacing: 20, // Spacing between rows
-                  crossAxisSpacing: 20, // Spacing between columns
-                  childAspectRatio: 0.8, // Width to height ratio of the grid items
-                ),
-                padding: const EdgeInsets.all(30),
-                itemCount: names.length,
-                itemBuilder: (context, index) {
-                  return Column(
-                    children: [
-                      ElevatedButton(
+            child: GridView.builder(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 200,
+                // crossAxisCount: 2, // Number of columns
+                mainAxisSpacing: 20, // Spacing between rows
+                crossAxisSpacing: 20, // Spacing between columns
+                childAspectRatio:
+                    0.8, // Width to height ratio of the grid items
+              ),
+              padding: const EdgeInsets.all(30),
+              itemCount: names.length,
+              itemBuilder: (context, index) {
+                return Column(
+                  children: [
+                    ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.all(0),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12), // Adjust the radius for rounded corners
+                            borderRadius: BorderRadius.circular(
+                                12), // Adjust the radius for rounded corners
                           ),
                         ),
                         onPressed: () {
                           // Handle button press
-
-                          // var recipe_detail = await getRecipeDetail(recipeIds[index]);
+                          _getIngredient(db, recipeIds[index]);
+                          _getSteps(db, recipeIds[index]);
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => RecipePage(),
-                            // settings: const RouteSettings(
-                            //   arguments: {recipe_detail},
-                            // ),
+                            MaterialPageRoute(
+                              builder: (context) => RecipePage(ingredientDetail: ingredientDetail, stepsDetail: stepsDetail),
+                              // settings: const RouteSettings(
+                              //   arguments: {recipe_detail},
+                              // ),
                             ),
-                          ).then((value){
+                          ).then((value) {
                             // is triggered when coming back Nagivator.pop(context, value)
                             setState(() {
                               stateData = value ?? stateData;
@@ -319,16 +344,16 @@ class _GeneratorPageState extends State<GeneratorPage> {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: Image.asset(
-                            images[index], 
-                            fit: BoxFit.cover,),
-                        )
-                      ),
-                      Expanded(child: Text(names[index])),
-                    ],
-                  );
-                },
-              ),
+                            images[index],
+                            fit: BoxFit.cover,
+                          ),
+                        )),
+                    Expanded(child: Text(names[index])),
+                  ],
+                );
+              },
             ),
+          ),
         ],
       ),
     );
@@ -336,69 +361,83 @@ class _GeneratorPageState extends State<GeneratorPage> {
 }
 
 class RecipePage extends StatelessWidget {
-  const RecipePage({super.key});
+  List<Ingredient> ingredientDetail;
+  String stepsDetail;
+  LineSplitter ls = const LineSplitter();
+
+  RecipePage({super.key,
+  required this.ingredientDetail,
+  required this.stepsDetail});
 
   @override
   Widget build(BuildContext context) {
     const ingredientText = "broccoli 500g\ntofu 200g\n";
+    
     return PopScope(
-      canPop: false,
+      canPop: false, // prevents swipeleft as back 
       child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: Theme.of(context).colorScheme.primary,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pop(context, 'been to recipe');
-          },
-        ),
-        title: Container(
-          padding: const EdgeInsets.all(10),
-          child: Text(
-            'Tom ka gai',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onPrimary,
+          appBar: AppBar(
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () {
+                Navigator.pop(context, 'been to recipe');
+              },
+            ),
+            title: Container(
+              padding: const EdgeInsets.all(10),
+              child: Text(
+                'Tom ka gai',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onPrimary,
+                    ),
+              ),
             ),
           ),
-        ),
-      ),
-        body: Container(
-          color: Theme.of(context).colorScheme.primaryContainer,
-          child: SafeArea(
-          child: Column(
-            children: [
-              const Row(children: [
-                Expanded(child: Text(ingredientText, textAlign: TextAlign.center)),
-                Expanded(
-                    child: FittedBox(
-                      child: FlutterLogo(),
+          body: Container(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    const Row(
+                      children: [
+                        Expanded(
+                            child: 
+                              //TODO change this to DataTable
+                                Text(ingredientText,
+                                textAlign: TextAlign.center)),
+                        Expanded(
+                          child: FittedBox(
+                            child: FlutterLogo(),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-              ],),
-              const Text("30min"),
-              Container
-              (padding: const EdgeInsets.all(15),
-               child: const Text("1. wash broccoli. \n2. cook",textAlign: TextAlign.left,)
-               )
-            ],),
-        )
-        
-        )
-        ),
+                    const Text("30min"),
+                        
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.all(15),
+                        children: 
+                          ls.convert(stepsDetail).map((i) => Text(i,textAlign: TextAlign.left,)).toList()
+                          ),
+                    )
+                    
+                  ],
+                ),
+              ))),
     );
   }
-
 }
 
 class IngredientRow extends StatelessWidget {
   final Function() onChangeSelection;
   final List<String> listIngredients;
 
-  const IngredientRow({
-    super.key,
-    required this.onChangeSelection,
-    required this.listIngredients
-  });
+  const IngredientRow(
+      {super.key,
+      required this.onChangeSelection,
+      required this.listIngredients});
 
   @override
   Widget build(BuildContext context) {
@@ -406,32 +445,35 @@ class IngredientRow extends StatelessWidget {
       mainAxisSize: MainAxisSize.max,
       children: <Widget>[
         SizedBox(width: 20),
-         Expanded(
-           child: Column(
-                    // mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.center, // not to take all available horizontal space
-                    children:  <Widget>[
-                      
-                      AutocompleteBasicExample(onChangeSelection: onChangeSelection, 
-                      listIngredients: listIngredients,
-                      fieldId: 0,), // Example widget from the link
-                    ],
-                  ),
-         ),
-         SizedBox(width: 20),
-         Expanded(
-           child: Column(
-                    // mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.center, // not to take all available horizontal space
-                    children:  <Widget>[
-                      
-                      AutocompleteBasicExample(onChangeSelection: onChangeSelection, 
-                      listIngredients: listIngredients,
-                      fieldId: 1), // Example widget from the link
-                    ],
-                  ),
-         ),
-         SizedBox(width: 20),
+        Expanded(
+          child: Column(
+            // mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment
+                .center, // not to take all available horizontal space
+            children: <Widget>[
+              AutocompleteBasicExample(
+                onChangeSelection: onChangeSelection,
+                listIngredients: listIngredients,
+                fieldId: 0,
+              ), // Example widget from the link
+            ],
+          ),
+        ),
+        SizedBox(width: 20),
+        Expanded(
+          child: Column(
+            // mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment
+                .center, // not to take all available horizontal space
+            children: <Widget>[
+              AutocompleteBasicExample(
+                  onChangeSelection: onChangeSelection,
+                  listIngredients: listIngredients,
+                  fieldId: 1), // Example widget from the link
+            ],
+          ),
+        ),
+        SizedBox(width: 20),
       ],
     );
   }
@@ -446,10 +488,10 @@ class MyAppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  var selectionMap = <int,String>{};
+  var selectionMap = <int, String>{};
   var selection = <String>{};
-  void passSelected (fieldId, selected) {
-    selectionMap[fieldId]=selected;
+  void passSelected(fieldId, selected) {
+    selectionMap[fieldId] = selected;
     selection = selectionMap.values.toSet();
     debugPrint(selection.join(','));
     // _triggerRefresh();
@@ -460,54 +502,24 @@ class MyAppState extends ChangeNotifier {
   // }
 }
 
-class BigCard extends StatelessWidget {
-  const BigCard({
-    super.key,
-    required this.pair,
-  });
-
-  final WordPair pair;
-  
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final style = theme.textTheme.displayMedium!.copyWith(
-      fontFamily: 'helvetica',
-      color:theme.colorScheme.onPrimary, // change the color but keep the rest
-    );
-
-    return Card(
-      color: theme.colorScheme.primary,
-      elevation: 10,
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Text(
-          pair.asSnakeCase, 
-          style: style,
-          semanticsLabel: "${pair.first} ${pair.second}", //for VoiceOver to read correctly
-          ),
-      ),
-    );
-  }
-}
-
 class AutocompleteBasicExample extends StatelessWidget {
   final Function() onChangeSelection;
   final List<String> listIngredients;
   final int fieldId;
 
-  const AutocompleteBasicExample({super.key, 
-                required this.onChangeSelection,
-                required this.listIngredients,
-                required this.fieldId});
-  
+  const AutocompleteBasicExample(
+      {super.key,
+      required this.onChangeSelection,
+      required this.listIngredients,
+      required this.fieldId});
+
   // static const List<String> _kOptions = <String>[
   //   'broccoli',
   //   'chicken',
   //   'tofu',
   // ];
   // final List<String> _kOptions = listIngredients;
-  
+
   @override
   Widget build(BuildContext context) {
     var appState = context.watch<MyAppState>();
@@ -521,7 +533,6 @@ class AutocompleteBasicExample extends StatelessWidget {
         });
       },
       onSelected: (String selected) {
-        
         appState.passSelected(fieldId, selected);
         onChangeSelection();
       },
@@ -532,8 +543,8 @@ class AutocompleteBasicExample extends StatelessWidget {
 int hashStringToInt(String name) {
   List<int> bytes = utf8.encode(name);
   Digest md5Hash = md5.convert(bytes);
-  String hexSubString = md5Hash.toString().substring(0,6);
-  int converted = int.parse(hexSubString, radix:16);
+  String hexSubString = md5Hash.toString().substring(0, 6);
+  int converted = int.parse(hexSubString, radix: 16);
   return converted;
 }
 
@@ -543,4 +554,18 @@ class DatabaseProvider with ChangeNotifier {
   DatabaseProvider(this.database);
 
   // Additional methods to interact with the database can be added here.
+}
+
+class Ingredient {
+
+  final String name;
+  final double amount;
+  final String unit;
+  
+  Ingredient({
+    required this.name,
+    required this.amount,
+    required this.unit, required ,
+  });
+  
 }
