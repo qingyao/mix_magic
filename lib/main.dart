@@ -1,6 +1,6 @@
+import 'dart:core';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:async';
 import 'package:crypto/crypto.dart';
 
 import 'package:flutter/material.dart';
@@ -9,12 +9,11 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
 Future<Database> initializeDb() async {
   final documentsDirectory = await getApplicationDocumentsDirectory();
-  final path = join(documentsDirectory.path, 'example.db');
+  final path = join(documentsDirectory.path, 'data.db');
 
   // Delete the existing database (for development/debugging purposes)
   if (await File(path).exists()) {
@@ -72,6 +71,7 @@ Future<List<int>> getRecipesByIngredients(
   }
   return recipeIds.toList();
 }
+
 Future<String> getRecipeDetail(Database db, int recipeId) async {
   var recipes = await db
       .query('recipe_detail', where: 'recipe_id=?', whereArgs: [recipeId]);
@@ -97,14 +97,17 @@ Future<List<String>> getAllIngredients(Database db) async {
 }
 
 Future<List<Ingredient>> getIngredientDetail(Database db, int recipeId) async {
-  var ingredients = await db
-      .query('recipe', where: 'recipe_id=?', whereArgs: [recipeId]);
+  var ingredients =
+      await db.query('recipe', where: 'recipe_id=?', whereArgs: [recipeId]);
 
-  return ingredients.map((i)=>
-    Ingredient(name:i['ingredient_name'] as String,
-    amount:i['ingredient_amount'] as double,
-    unit:i['ingredient_unit'] as String,)
-  ).toList();
+  print(ingredients.map((i) => i.toString()));
+  return ingredients
+      .map((i) => Ingredient(
+            name: i['ingredient_name'] as String,
+            amount: i['ingredient_amount'] as double?,
+            unit: i['ingredient_unit'] as String,
+          ))
+      .toList();
 }
 
 Future<List<Map<String, dynamic>>> getRecipes(Database db) async {
@@ -155,9 +158,18 @@ class MyApp extends StatelessWidget {
         child: MaterialApp(
           title: 'Mix Magic',
           theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightGreen),
+            colorScheme: ColorScheme.fromSeed(
+                seedColor: Colors.lightGreen, brightness: Brightness.light),
             useMaterial3: true,
+            /* light theme settings */
           ),
+          darkTheme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+                seedColor: Colors.lightGreen, brightness: Brightness.dark),
+            useMaterial3: true,
+            /* dark theme settings */
+          ),
+          themeMode: ThemeMode.system,
           home: const MyHomePage(),
         ));
   }
@@ -212,16 +224,18 @@ class _GeneratorPageState extends State<GeneratorPage> {
   List<String> images = [];
   List<String> listIngredients = [];
   List<Ingredient> ingredientDetail = [];
-  String stepsDetail = "";
+  String stepsDetail = '';
+  bool isLoading = false;
+  String stateData = "Initial state";
   // final stepsDetail = "1. wash broccoli. \n2. cook";
-  
+
   bool listIngredientInitialized = false;
 
   Future<void> _initializeAsyncDependencies(Database db) async {
     // Fetch the database from the context after the first build
     final tmp = await getAllIngredients(db);
-    print(tmp);
-
+    // print(tmp);
+    print(removeTrailing(['.', ','], 'abc.'));
     // Perform your asynchronous operation with the database
     // Update the state with the fetched data
     setState(() {
@@ -230,20 +244,21 @@ class _GeneratorPageState extends State<GeneratorPage> {
     });
   }
 
-    void _getIngredient(Database db, int recipeId) async{
-      ingredientDetail = await getIngredientDetail(db, recipeId);
+  Future<String> _checkImage(String image) async {
+    try {
+      await rootBundle.load(image);
+      return image;
+    } catch (e) {
+      return 'assets/example.png';
     }
-
-    void _getSteps(Database db, int recipeId) async {
-      stepsDetail = await getRecipeDetail(db,recipeId);
-    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    String stateData = "Initial state";
-
     final db = Provider.of<DatabaseProvider>(context).database;
 
+    // db is available here but ingredients are needed for autocomplete
+    // callback allows immediately loading ingredients after context is built.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!listIngredientInitialized) {
         _initializeAsyncDependencies(db);
@@ -252,20 +267,56 @@ class _GeneratorPageState extends State<GeneratorPage> {
 
     var appState = context.watch<MyAppState>();
 
-    void _updateId() async {
+    void updateId() async {
       //reset images and names
       images = [];
       names = [];
       print("I'm updating recipes!");
-      recipeIds = await getRecipesByIngredients(db, appState.selection) as List<int>;
+      recipeIds = await getRecipesByIngredients(db, appState.selection);
       for (var recipeId in recipeIds) {
         var recipeName = await getRecipeName(db, recipeId);
+        // check if image exists
+        String image =
+            await _checkImage('assets/${recipeName.replaceAll(' ', '-')}.png');
         setState(() {
           names.add(recipeName);
-          images.add('assets/example.png');
+          images.add(image);
         });
       }
     }
+
+    void navigateToNextPage(int index) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => RecipePage(
+              recipeName: names[index],
+              ingredientDetail: ingredientDetail,
+              stepsDetail: stepsDetail),
+          // settings: const RouteSettings(
+          //   arguments: {recipe_detail},
+          // ),
+        ),
+      ).then((value) {
+        // is triggered when coming back Nagivator.pop(context, value)
+        setState(() {
+          stateData = value ?? stateData;
+        });
+      });
+    }
+
+    void getIngredientSteps(Database db, int recipeId, int index) async {
+      setState(() {
+        isLoading = true;
+      });
+      ingredientDetail = await getIngredientDetail(db, recipeId);
+      stepsDetail = await getRecipeDetail(db, recipeId);
+      setState(() {
+        isLoading = false;
+      });
+      navigateToNextPage(index);
+    }
+
     return SafeArea(
       child: Column(
         children: [
@@ -279,7 +330,7 @@ class _GeneratorPageState extends State<GeneratorPage> {
             ],
           ),
           IngredientRow(
-            onChangeSelection: _updateId,
+            onChangeSelection: updateId,
             listIngredients: listIngredients,
           ),
           const SizedBox(
@@ -323,22 +374,7 @@ class _GeneratorPageState extends State<GeneratorPage> {
                         ),
                         onPressed: () {
                           // Handle button press
-                          _getIngredient(db, recipeIds[index]);
-                          _getSteps(db, recipeIds[index]);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => RecipePage(ingredientDetail: ingredientDetail, stepsDetail: stepsDetail),
-                              // settings: const RouteSettings(
-                              //   arguments: {recipe_detail},
-                              // ),
-                            ),
-                          ).then((value) {
-                            // is triggered when coming back Nagivator.pop(context, value)
-                            setState(() {
-                              stateData = value ?? stateData;
-                            });
-                          });
+                          getIngredientSteps(db, recipeIds[index], index);
                           // debugPrint('Button with ID: ${ids[index]} pressed');
                         },
                         child: ClipRRect(
@@ -361,20 +397,27 @@ class _GeneratorPageState extends State<GeneratorPage> {
 }
 
 class RecipePage extends StatelessWidget {
-  List<Ingredient> ingredientDetail;
-  String stepsDetail;
-  LineSplitter ls = const LineSplitter();
+  final String recipeName;
+  final List<Ingredient> ingredientDetail;
+  final String stepsDetail;
+  final LineSplitter ls = const LineSplitter();
 
-  RecipePage({super.key,
-  required this.ingredientDetail,
-  required this.stepsDetail});
+  const RecipePage(
+      {super.key,
+      required this.recipeName,
+      required this.ingredientDetail,
+      required this.stepsDetail});
 
   @override
   Widget build(BuildContext context) {
-    const ingredientText = "broccoli 500g\ntofu 200g\n";
-    
+    // const ingredientText = "broccoli 500g\ntofu 200g\n";
+    var ingredientList = ingredientDetail.map((i) {
+      return i.name.toLowerCase().split(' ');
+    });
+    var flatIngredientList = ingredientList.expand((i) => i).toSet();
+
     return PopScope(
-      canPop: false, // prevents swipeleft as back 
+      canPop: false, // prevents swipeleft as back
       child: Scaffold(
           appBar: AppBar(
             backgroundColor: Theme.of(context).colorScheme.primary,
@@ -387,7 +430,7 @@ class RecipePage extends StatelessWidget {
             title: Container(
               padding: const EdgeInsets.all(10),
               child: Text(
-                'Tom ka gai',
+                recipeName, //'Tom ka gai',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onPrimary,
                     ),
@@ -399,30 +442,41 @@ class RecipePage extends StatelessWidget {
               child: SafeArea(
                 child: Column(
                   children: [
-                    const Row(
-                      children: [
-                        Expanded(
-                            child: 
-                              //TODO change this to DataTable
-                                Text(ingredientText,
-                                textAlign: TextAlign.center)),
-                        Expanded(
-                          child: FittedBox(
-                            child: FlutterLogo(),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Text("30min"),
-                        
                     Expanded(
+                        flex: 3,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: IngredientTable(
+                                  selected: List<bool>.generate(
+                                      ingredientDetail.length,
+                                      (int index) => false),
+                                  ingredientDetail: ingredientDetail),
+                            ),
+                            // Expanded(
+                            //     flex: 2,
+                            //     child: Column(
+                            //       mainAxisSize: MainAxisSize.min,
+                            //       children: [
+                            //       Expanded(child:(FittedBox(child:FlutterLogo()))),
+                            //       Text("30min")]
+                            //       ),
+                            //   ),
+                          ],
+                        )),
+                    Expanded(
+                      flex: 2,
                       child: ListView(
-                        padding: const EdgeInsets.all(15),
-                        children: 
-                          ls.convert(stepsDetail).map((i) => Text(i,textAlign: TextAlign.left,)).toList()
-                          ),
+                          padding: const EdgeInsets.all(15),
+                          children: ls
+                              .convert(stepsDetail)
+                              .map((i) => translateStepsToRichText(
+                                      i, flatIngredientList, context)
+                                  // Text(i,textAlign: TextAlign.left,)
+                                  )
+                              .toList()),
                     )
-                    
                   ],
                 ),
               ))),
@@ -444,7 +498,7 @@ class IngredientRow extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.max,
       children: <Widget>[
-        SizedBox(width: 20),
+        const SizedBox(width: 20),
         Expanded(
           child: Column(
             // mainAxisAlignment: MainAxisAlignment.center,
@@ -459,7 +513,7 @@ class IngredientRow extends StatelessWidget {
             ],
           ),
         ),
-        SizedBox(width: 20),
+        const SizedBox(width: 20),
         Expanded(
           child: Column(
             // mainAxisAlignment: MainAxisAlignment.center,
@@ -473,7 +527,7 @@ class IngredientRow extends StatelessWidget {
             ],
           ),
         ),
-        SizedBox(width: 20),
+        const SizedBox(width: 20),
       ],
     );
   }
@@ -529,7 +583,9 @@ class AutocompleteBasicExample extends StatelessWidget {
           return const Iterable<String>.empty();
         }
         return listIngredients.where((String option) {
-          return option.contains(textEditingValue.text.toLowerCase());
+          return option
+              .split(' ')
+              .any((i) => i.startsWith(textEditingValue.text.toLowerCase()));
         });
       },
       onSelected: (String selected) {
@@ -538,14 +594,6 @@ class AutocompleteBasicExample extends StatelessWidget {
       },
     );
   }
-}
-
-int hashStringToInt(String name) {
-  List<int> bytes = utf8.encode(name);
-  Digest md5Hash = md5.convert(bytes);
-  String hexSubString = md5Hash.toString().substring(0, 6);
-  int converted = int.parse(hexSubString, radix: 16);
-  return converted;
 }
 
 class DatabaseProvider with ChangeNotifier {
@@ -557,15 +605,168 @@ class DatabaseProvider with ChangeNotifier {
 }
 
 class Ingredient {
-
   final String name;
-  final double amount;
+  final double? amount;
   final String unit;
-  
+
   Ingredient({
     required this.name,
     required this.amount,
-    required this.unit, required ,
+    required this.unit,
+    required,
   });
-  
+}
+
+class IngredientTable extends StatefulWidget {
+  final List<Ingredient> ingredientDetail;
+  List<bool> selected;
+
+  IngredientTable({
+    super.key,
+    required this.ingredientDetail,
+    required this.selected,
+  });
+
+  @override
+  State<IngredientTable> createState() => _IngredientTableState();
+}
+
+class _IngredientTableState extends State<IngredientTable> {
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+        child: DataTable(
+            dataRowMinHeight: 30,
+            dataRowMaxHeight: 40,
+            headingRowHeight: 40,
+            columns: ["Ingredient", "Amount"]
+                .map((i) => DataColumn(
+                      label: Expanded(
+                          child: Text(i,
+                              style: TextStyle(
+                                  fontStyle: FontStyle.italic,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onPrimaryContainer))),
+                    ))
+                .toList(),
+            rows: widget.ingredientDetail.asMap().entries.map((entry) {
+              int idx = entry.key;
+              Ingredient i = entry.value;
+              return DataRow(
+                selected: widget.selected[idx],
+                onSelectChanged: (bool? value) {
+                  setState(() {
+                    widget.selected[idx] = value!;
+                    // print(Theme.of(context).dataTableTheme.dataTextStyle);
+                  });
+                },
+                cells: [
+                  DataCell(Text(i.name,
+                      style: TextStyle(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onPrimaryContainer))),
+                  DataCell(Text(
+                    "${doubleToString(i.amount)} ${i.unit}",
+                    style: TextStyle(
+                        color:
+                            Theme.of(context).colorScheme.onPrimaryContainer),
+                  )),
+                ],
+              );
+            }).toList()));
+  }
+}
+
+int hashStringToInt(String name) {
+  List<int> bytes = utf8.encode(name);
+  Digest md5Hash = md5.convert(bytes);
+  String hexSubString = md5Hash.toString().substring(0, 6);
+  int converted = int.parse(hexSubString, radix: 16);
+  return converted;
+}
+
+String doubleToString(double? n) {
+  if (n == null) {
+    return "-"; //stuff like pinch, garnish, to taste
+  } else if (n % 1 != 0) {
+    return n.toString();
+  } else {
+    return n.round().toString();
+  }
+}
+
+RichText translateStepsToRichText(
+    String step, Set<String> ingredients, context) {
+  final words = step.split(' ');
+
+  // put bold on numbers and the word after
+  var boldIndex = List<bool>.generate(words.length, (i) => false);
+
+  var trailing = false;
+  for (var i = 0; i < words.length; i++) {
+    var w = words[i];
+    if (w.startsWith(RegExp(r'\d')) & !RegExp(r'[a-zA-Z]').hasMatch(w)) {
+      boldIndex[i] = true;
+      trailing = true;
+    } else if (trailing == true) {
+      boldIndex[i] = true;
+      trailing = false;
+    }
+  }
+  // put font size, color variation on ingredients
+  var ingredientIndex = words.map((w) {
+    if (ingredients.contains(removeTrailing([',', '.'], w.toLowerCase()))) {
+      return true;
+    } else {
+      return false;
+    }
+  }).toList();
+
+  return RichText(
+      text: TextSpan(
+          children: words.asMap().entries.map((entries) {
+    var idx = entries.key;
+    var w = entries.value;
+    if (boldIndex[idx]) {
+      return TextSpan(
+          text: '$w ',
+          style: TextStyle(
+              // fontWeight: FontWeight.bold,
+              decoration: TextDecoration.underline,
+              // decorationStyle: TextDecorationStyle.dashed,
+              color: Theme.of(context).colorScheme.onPrimaryContainer));
+    } else if (ingredientIndex[idx]) {
+      return TextSpan(
+          text: '$w ',
+          style: TextStyle(
+              fontWeight: FontWeight.bold,
+              // backgroundColor: Theme.of(context).colorScheme.onPrimaryFixed,
+              color: Theme.of(context).colorScheme.onPrimaryContainer));
+    } else {
+      return TextSpan(
+          text: '$w ',
+          style: TextStyle(
+              color: Theme.of(context).colorScheme.onPrimaryContainer));
+    }
+  }).toList()));
+}
+
+String removeTrailing(List<String> pattern, String from) {
+  if (pattern.isEmpty) return from;
+  var i = from.length;
+  var dontFind = 0;
+  while (dontFind != pattern.length) {
+    dontFind = 0;
+    for (var p in pattern) {
+      if (from.startsWith(p, i - p.length)) {
+        i -= p.length;
+        break;
+      }
+      dontFind++;
+    }
+  }
+
+  return from.substring(0, i);
 }
