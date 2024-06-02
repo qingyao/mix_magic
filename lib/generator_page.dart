@@ -31,7 +31,7 @@ class _GeneratorPageState extends State<GeneratorPage> {
     // Fetch the database from the context after the first build
     final tmp = await getAllIngredients(db);
     // print(tmp);
-    print(removeTrailing(['.', ','], 'abc.'));
+    // print(removeTrailing(['.', ','], 'abc.'));
     // Perform your asynchronous operation with the database
     // Update the state with the fetched data
     setState(() {
@@ -67,7 +67,7 @@ class _GeneratorPageState extends State<GeneratorPage> {
       //reset images and names
       images = [];
       names = [];
-      print("I'm updating recipes!");
+      print("I'm updating found recipes!");
       recipeIds = await getRecipesByIngredients(db, appState.selection);
       for (var recipeId in recipeIds) {
         var recipeName = await getRecipeName(db, recipeId);
@@ -86,6 +86,7 @@ class _GeneratorPageState extends State<GeneratorPage> {
         context,
         MaterialPageRoute(
           builder: (context) => RecipePage(
+              recipeId: recipeIds[index],
               recipeName: names[index],
               ingredientDetail: ingredientDetail,
               stepsDetail: stepsDetail),

@@ -7,12 +7,15 @@ import 'helper.dart';
 import 'shared.dart';
 
 class RecipePage extends StatefulWidget {
+  int recipeId;
   String recipeName;
   List<Ingredient> ingredientDetail;
   final String stepsDetail;
+  List<List<TextEditingController>> _controllers = [];
 
   RecipePage(
       {super.key,
+      required this.recipeId,
       required this.recipeName,
       required this.ingredientDetail,
       required this.stepsDetail});
@@ -25,8 +28,19 @@ class _RecipePageState extends State<RecipePage> {
   final LineSplitter ls = const LineSplitter();
 
   @override
+  void initState() {
+    super.initState();
+    widget._controllers = widget.ingredientDetail.map((i) {
+      return [
+        TextEditingController(text: i.name),
+        TextEditingController(text: "${doubleToString(i.amount)} ${i.unit}")
+      ];
+    }).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // const ingredientText = "broccoli 500g\ntofu 200g\n";
+
     var ingredientList = widget.ingredientDetail.map((i) {
       return i.name.toLowerCase().split(' ');
     });
@@ -58,7 +72,11 @@ class _RecipePageState extends State<RecipePage> {
               child: SafeArea(
                 child: Column(
                   children: [
-                    Container(child: Text(widget.recipeName, textScaler: TextScaler.linear(1.2)), padding: EdgeInsets.all(10.0),),
+                    Container(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Text(widget.recipeName,
+                          textScaler: const TextScaler.linear(1.2)),
+                    ),
                     Expanded(
                         flex: 3,
                         child: Row(
@@ -66,10 +84,12 @@ class _RecipePageState extends State<RecipePage> {
                             Expanded(
                               flex: 3,
                               child: IngredientTable(
+                                  recipeId: widget.recipeId,
                                   selected: List<bool>.generate(
                                       widget.ingredientDetail.length,
                                       (int index) => false),
-                                  ingredientDetail: widget.ingredientDetail),
+                                  ingredientDetail:widget.ingredientDetail,
+                                  ingredientController: widget._controllers),
                             ),
                             // Expanded(
                             //     flex: 2,
@@ -101,24 +121,66 @@ class _RecipePageState extends State<RecipePage> {
   }
 }
 
-
 class IngredientTable extends StatefulWidget {
+  int recipeId;
+  List<List<TextEditingController>> ingredientController;
   final List<Ingredient> ingredientDetail;
   List<bool> selected;
 
   IngredientTable({
     super.key,
+    required this.recipeId,
+    required this.ingredientController,
     required this.ingredientDetail,
     required this.selected,
   });
 
+  
   @override
   State<IngredientTable> createState() => _IngredientTableState();
 }
 
 class _IngredientTableState extends State<IngredientTable> {
+  
   @override
   Widget build(BuildContext context) {
+    final db = Provider.of<DatabaseProvider>(context).database;
+
+    void DbUpdateIngredientName(int idx) {
+      var oldName = widget.ingredientDetail[idx].name;
+      var data = {'ingredient_name': widget.ingredientController[idx][0].text};
+      db.update('recipe', data, where:'ingredient_name=?',whereArgs: [oldName]);
+      db.update('ingredient', data, where:'ingredient_name=?',whereArgs: [oldName]);
+      print('Db updated ingredient name');
+    }
+
+    void DbUpdateIngredientAmount(int idx, int recipeId) {
+      var newAmount = widget.ingredientController[idx][1].text.trim();
+      double newNumber;
+      String newUnit;
+
+      if (newAmount.split(' ').length == 2 ) {
+        try {
+          newNumber = double.parse(newAmount.split(' ')[0]);
+        } catch (_) {
+          // implement error info to user if the format is incorrect
+          print('Could not parse number');
+          return;
+        }
+      } else {
+        // implement error info to user if the format is incorrect
+        print("It's not 2 words");
+        return;
+      }
+      try {
+        newUnit = newAmount.split(' ')[1];
+      } catch(_){
+        print('Couldn not parse unit');
+        return;
+      }
+      db.update('recipe', {'ingredient_amount':newNumber, 'ingredient_unit': newUnit}, where:'recipe_id=?', whereArgs: [recipeId]);
+      print('Db updated ingredient amount');
+    }
     return SingleChildScrollView(
         child: DataTable(
             dataRowMinHeight: 30,
@@ -135,9 +197,9 @@ class _IngredientTableState extends State<IngredientTable> {
                                       .onPrimaryContainer))),
                     ))
                 .toList(),
-            rows: widget.ingredientDetail.asMap().entries.map((entry) {
+            rows: widget.ingredientController.asMap().entries.map((entry) {
               int idx = entry.key;
-              Ingredient i = entry.value;
+              List<TextEditingController> i = entry.value;
               return DataRow(
                 selected: widget.selected[idx],
                 onSelectChanged: (bool? value) {
@@ -147,13 +209,27 @@ class _IngredientTableState extends State<IngredientTable> {
                   });
                 },
                 cells: [
-                  DataCell(Text(i.name,
+                  DataCell(TextField(
+                      controller: i[0],
+                      maxLines: 2,
+                      textInputAction: TextInputAction.done,
+                      decoration:
+                          const InputDecoration(border: InputBorder.none),
+                      onEditingComplete: () {
+                        DbUpdateIngredientName(idx);
+                        FocusScope.of(context).unfocus(); 
+                        },
                       style: TextStyle(
                           color: Theme.of(context)
                               .colorScheme
                               .onPrimaryContainer))),
-                  DataCell(Text(
-                    "${doubleToString(i.amount)} ${i.unit}",
+                  DataCell(TextField(
+                    controller: i[1],
+                    decoration: const InputDecoration(border: InputBorder.none),
+                    onEditingComplete: () {
+                      DbUpdateIngredientAmount(idx, widget.recipeId);
+                      FocusScope.of(context).unfocus(); 
+                    },
                     style: TextStyle(
                         color:
                             Theme.of(context).colorScheme.onPrimaryContainer),
@@ -163,7 +239,6 @@ class _IngredientTableState extends State<IngredientTable> {
             }).toList()));
   }
 }
-
 
 RichText translateStepsToRichText(
     String step, Set<String> ingredients, context) {
@@ -175,7 +250,9 @@ RichText translateStepsToRichText(
   var trailing = false;
   for (var i = 0; i < words.length; i++) {
     var w = words[i];
-    if (w.startsWith(RegExp(r'\d')) & !RegExp(r'[a-zA-Z]').hasMatch(w)) {
+    if (w.startsWith(RegExp(r'\d')) &
+        !RegExp(r'[a-zA-Z]').hasMatch(w) &
+        !w.endsWith('.')) {
       boldIndex[i] = true;
       trailing = true;
     } else if (trailing == true) {
@@ -207,15 +284,15 @@ RichText translateStepsToRichText(
               color: Theme.of(context).colorScheme.onPrimaryContainer));
     } else if (ingredientIndex[idx]) {
       return WidgetSpan(
-        child:Text.rich(
-          TextSpan(text:'$w ') ,
-          textScaler: TextScaler.linear(1.05),
-          textHeightBehavior: TextHeightBehavior(applyHeightToLastDescent:false),
-          style: TextStyle(
-              fontWeight: FontWeight.bold,
-              leadingDistribution: TextLeadingDistribution.even,
-              // backgroundColor: Theme.of(context).colorScheme.onPrimaryFixed,
-              color: Theme.of(context).colorScheme.onPrimaryContainer)));
+          child: Text.rich(TextSpan(text: '$w '),
+              textScaler: TextScaler.linear(1.05),
+              textHeightBehavior:
+                  TextHeightBehavior(applyHeightToLastDescent: false),
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  leadingDistribution: TextLeadingDistribution.even,
+                  // backgroundColor: Theme.of(context).colorScheme.onPrimaryFixed,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer)));
     } else {
       return TextSpan(
           text: '$w ',
@@ -224,7 +301,6 @@ RichText translateStepsToRichText(
     }
   }).toList()));
 }
-
 
 String doubleToString(double? n) {
   if (n == null) {
@@ -235,4 +311,3 @@ String doubleToString(double? n) {
     return n.round().toString();
   }
 }
-

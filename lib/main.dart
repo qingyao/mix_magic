@@ -11,6 +11,7 @@ import 'my_app_state.dart';
 import 'generator_page.dart';
 import 'helper.dart';
 import 'shared.dart';
+import 'add_recipe_page.dart';
 
 Future<Database> initializeDb() async {
   final documentsDirectory = await getApplicationDocumentsDirectory();
@@ -97,13 +98,19 @@ class MyApp extends StatelessWidget {
           title: 'Mix Magic',
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
-                seedColor: Colors.lightGreen, brightness: Brightness.light),
+                //8BC34A
+                seedColor: Colors.lightGreen,
+                brightness: Brightness.light,
+                //#c34a8b, #c34a4e
+                secondary: const Color(0xFF824AC3)),
             useMaterial3: true,
             /* light theme settings */
           ),
           darkTheme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
-                seedColor: Colors.lightGreen, brightness: Brightness.dark),
+                seedColor: Colors.lightGreen,
+                brightness: Brightness.dark,
+                secondary: const Color(0xFF824AC3)),
             useMaterial3: true,
             /* dark theme settings */
           ),
@@ -123,10 +130,28 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  var selectedIndex = 0;
+  var _selectedIndex = 0;
+  Widget page = const GeneratorPage();
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+      switch (_selectedIndex) {
+      case 0:
+        page = const GeneratorPage();
+        break;
+      case 1:
+        page = const AddRecipePage();
+        break;
+      default:
+        throw UnimplementedError('no widget for $_selectedIndex');
+    }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+
     return LayoutBuilder(builder: (context, constraints) {
       return Scaffold(
         appBar: AppBar(
@@ -142,7 +167,22 @@ class _MyHomePageState extends State<MyHomePage> {
                 ))),
         body: Container(
           color: Theme.of(context).colorScheme.primaryContainer,
-          child: const GeneratorPage(),
+          child: page,
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          selectedItemColor: Theme.of(context).colorScheme.secondary,
+          items: const <BottomNavigationBarItem>[
+            BottomNavigationBarItem(
+              icon: Icon(Icons.search),
+              label: 'Search Recipe',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.edit_document),
+              label: 'Add recipe',
+            )
+          ],
+          currentIndex: _selectedIndex,
+          onTap: _onItemTapped,
         ),
       );
     });
