@@ -92,3 +92,14 @@ int hashStringToInt(String name) {
   int converted = int.parse(hexSubString, radix: 16);
   return converted;
 }
+
+
+String doubleToString(double? n) {
+  if (n == null) {
+    return "-"; //stuff like pinch, garnish, to taste
+  } else if (n % 1 != 0) {
+    return n.toString();
+  } else {
+    return n.round().toString();
+  }
+}

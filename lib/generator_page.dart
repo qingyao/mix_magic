@@ -21,7 +21,7 @@ class _GeneratorPageState extends State<GeneratorPage> {
   List<String> listIngredients = [];
   List<Ingredient> ingredientDetail = [];
   String stepsDetail = '';
-  bool isLoading = false;
+  // bool isLoading = false;
   String stateData = "Initial state";
   // final stepsDetail = "1. wash broccoli. \n2. cook";
 
@@ -102,15 +102,15 @@ class _GeneratorPageState extends State<GeneratorPage> {
       });
     }
 
-    void getIngredientSteps(Database db, int recipeId, int index) async {
-      setState(() {
-        isLoading = true;
-      });
+    void prepareNavigation(Database db, int recipeId, int index) async {
+      // setState(() {
+      //   isLoading = true;
+      // });
       ingredientDetail = await getIngredientDetail(db, recipeId);
       stepsDetail = await getRecipeDetail(db, recipeId);
-      setState(() {
-        isLoading = false;
-      });
+      // setState(() {
+      //   isLoading = false;
+      // });
       navigateToNextPage(index);
     }
 
@@ -171,7 +171,7 @@ class _GeneratorPageState extends State<GeneratorPage> {
                         ),
                         onPressed: () {
                           // Handle button press
-                          getIngredientSteps(db, recipeIds[index], index);
+                          prepareNavigation(db, recipeIds[index], index);
                           // debugPrint('Button with ID: ${ids[index]} pressed');
                         },
                         child: ClipRRect(

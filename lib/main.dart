@@ -101,7 +101,7 @@ class MyApp extends StatelessWidget {
                 //8BC34A
                 seedColor: Colors.lightGreen,
                 brightness: Brightness.light,
-                //#c34a8b, #c34a4e
+                //#8BC34A, #c34a8b, #c34a4e https://www.canva.com/colors/color-wheel/
                 secondary: const Color(0xFF824AC3)),
             useMaterial3: true,
             /* light theme settings */
@@ -170,7 +170,7 @@ class _MyHomePageState extends State<MyHomePage> {
           child: page,
         ),
         bottomNavigationBar: BottomNavigationBar(
-          selectedItemColor: Theme.of(context).colorScheme.secondary,
+          selectedItemColor: Theme.of(context).colorScheme.primary,
           items: const <BottomNavigationBarItem>[
             BottomNavigationBarItem(
               icon: Icon(Icons.search),

@@ -5,25 +5,15 @@ import 'dart:io';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 
-class AddRecipePage extends StatelessWidget {
+class AddRecipePage extends StatefulWidget {
   const AddRecipePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: ImageUploadScreen(),
-    );
-  }
+  State<AddRecipePage> createState() => _AddRecipePageState();
 }
 
-class ImageUploadScreen extends StatefulWidget {
-  const ImageUploadScreen({super.key});
+class _AddRecipePageState extends State<AddRecipePage> {
 
-  @override
-  _ImageUploadScreenState createState() => _ImageUploadScreenState();
-}
-
-class _ImageUploadScreenState extends State<ImageUploadScreen> {
   File? _imageFile;
 
   final ImagePicker _picker = ImagePicker();
@@ -47,7 +37,7 @@ class _ImageUploadScreenState extends State<ImageUploadScreen> {
       compressFormat: ImageCompressFormat.png,
       maxWidth: 300,
       maxHeight: 300,
-    ) ;
+    );
 
     if (croppedFile != null) {
       setState(() {
@@ -62,7 +52,8 @@ class _ImageUploadScreenState extends State<ImageUploadScreen> {
     final bytes = await imageFile.readAsBytes();
     img.Image originalImage = img.decodeImage(bytes)!;
 
-    img.Image resizedImage = img.copyResize(originalImage, width: 300, height: 300);
+    img.Image resizedImage =
+        img.copyResize(originalImage, width: 300, height: 300);
     final compressedBytes = img.encodePng(resizedImage);
 
     final directory = await getApplicationDocumentsDirectory();
@@ -75,28 +66,28 @@ class _ImageUploadScreenState extends State<ImageUploadScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Image Upload Example'),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            _imageFile != null ? Expanded(child:ClipRRect(borderRadius: BorderRadius.circular(12), child:Image.file(_imageFile!))) : Text('No image selected.'),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _pickImage,
-              child: Text('Pick Image'),
+    return  Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                _imageFile != null
+                    ? Expanded(
+                        child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(_imageFile!)))
+                    : const SizedBox(height: 100,),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _pickImage,
+                  child: Text('Pick Image'),
+                ),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _cropImage,
+                  child: Text('Crop & Compress Image'),
+                ),
+              ],
             ),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _cropImage,
-              child: Text('Crop & Compress Image'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+          );
+}
 }

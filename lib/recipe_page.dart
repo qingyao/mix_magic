@@ -2,16 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'dart:convert';
 import 'package:provider/provider.dart';
-import 'my_app_state.dart';
 import 'helper.dart';
 import 'shared.dart';
+import 'ingredient_table.dart';
 
 class RecipePage extends StatefulWidget {
   int recipeId;
   String recipeName;
   List<Ingredient> ingredientDetail;
   final String stepsDetail;
-  List<List<TextEditingController>> _controllers = [];
 
   RecipePage(
       {super.key,
@@ -26,20 +25,45 @@ class RecipePage extends StatefulWidget {
 
 class _RecipePageState extends State<RecipePage> {
   final LineSplitter ls = const LineSplitter();
+  String buttonText = 'Edit';
+  Icon buttonIcon = const Icon(Icons.edit);
+  late Widget table;
+  late EditIngredientTable editIngredientTable;
+  late IngredientTable ingredientTable;
 
   @override
   void initState() {
     super.initState();
-    widget._controllers = widget.ingredientDetail.map((i) {
-      return [
-        TextEditingController(text: i.name),
-        TextEditingController(text: "${doubleToString(i.amount)} ${i.unit}")
-      ];
-    }).toList();
+    editIngredientTable = EditIngredientTable(
+        recipeId: widget.recipeId, ingredientDetail: widget.ingredientDetail);
+    ingredientTable = IngredientTable(
+      recipeId: widget.recipeId,
+      ingredientDetail: widget.ingredientDetail,
+    );
+    table = ingredientTable;
   }
 
   @override
   Widget build(BuildContext context) {
+    void toggleEdit() {
+      // current state is reading
+      if (buttonText == 'Edit') {
+        setState(() {
+          buttonText = 'Done';
+          table = editIngredientTable;
+          buttonIcon = const Icon(Icons.download_done);
+        });
+      } else {
+        // current state is editing
+        // TODO trigger child callback (save whole table) and here load from database the new ingredientDetail
+        setState(() {
+          buttonText = 'Edit';
+          table = ingredientTable;
+          buttonIcon =  const Icon(Icons.edit);
+          
+        });
+      }
+    }
 
     var ingredientList = widget.ingredientDetail.map((i) {
       return i.name.toLowerCase().split(' ');
@@ -52,6 +76,7 @@ class _RecipePageState extends State<RecipePage> {
           appBar: AppBar(
             backgroundColor: Theme.of(context).colorScheme.primary,
             leading: IconButton(
+              color: Theme.of(context).colorScheme.onPrimary,
               icon: const Icon(Icons.arrow_back),
               onPressed: () {
                 Navigator.pop(context, 'been to recipe');
@@ -72,10 +97,20 @@ class _RecipePageState extends State<RecipePage> {
               child: SafeArea(
                 child: Column(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10.0),
-                      child: Text(widget.recipeName,
-                          textScaler: const TextScaler.linear(1.2)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(10.0),
+                            child: Text(widget.recipeName,
+                                textScaler: const TextScaler.linear(1.5)),
+                          ),
+                        ),
+                        IconButton(
+                                onPressed: toggleEdit,
+                                icon: buttonIcon,
+                              ) //label:Text(buttonText)
+                      ],
                     ),
                     Expanded(
                         flex: 3,
@@ -83,14 +118,8 @@ class _RecipePageState extends State<RecipePage> {
                           children: [
                             Expanded(
                               flex: 3,
-                              child: IngredientTable(
-                                  recipeId: widget.recipeId,
-                                  selected: List<bool>.generate(
-                                      widget.ingredientDetail.length,
-                                      (int index) => false),
-                                  ingredientDetail:widget.ingredientDetail,
-                                  ingredientController: widget._controllers),
-                            ),
+                              child: table,
+                            )
                             // Expanded(
                             //     flex: 2,
                             //     child: Column(
@@ -118,125 +147,6 @@ class _RecipePageState extends State<RecipePage> {
                 ),
               ))),
     );
-  }
-}
-
-class IngredientTable extends StatefulWidget {
-  int recipeId;
-  List<List<TextEditingController>> ingredientController;
-  final List<Ingredient> ingredientDetail;
-  List<bool> selected;
-
-  IngredientTable({
-    super.key,
-    required this.recipeId,
-    required this.ingredientController,
-    required this.ingredientDetail,
-    required this.selected,
-  });
-
-  
-  @override
-  State<IngredientTable> createState() => _IngredientTableState();
-}
-
-class _IngredientTableState extends State<IngredientTable> {
-  
-  @override
-  Widget build(BuildContext context) {
-    final db = Provider.of<DatabaseProvider>(context).database;
-
-    void DbUpdateIngredientName(int idx) {
-      var oldName = widget.ingredientDetail[idx].name;
-      var data = {'ingredient_name': widget.ingredientController[idx][0].text};
-      db.update('recipe', data, where:'ingredient_name=?',whereArgs: [oldName]);
-      db.update('ingredient', data, where:'ingredient_name=?',whereArgs: [oldName]);
-      print('Db updated ingredient name');
-    }
-
-    void DbUpdateIngredientAmount(int idx, int recipeId) {
-      var newAmount = widget.ingredientController[idx][1].text.trim();
-      double newNumber;
-      String newUnit;
-
-      if (newAmount.split(' ').length == 2 ) {
-        try {
-          newNumber = double.parse(newAmount.split(' ')[0]);
-        } catch (_) {
-          // implement error info to user if the format is incorrect
-          print('Could not parse number');
-          return;
-        }
-      } else {
-        // implement error info to user if the format is incorrect
-        print("It's not 2 words");
-        return;
-      }
-      try {
-        newUnit = newAmount.split(' ')[1];
-      } catch(_){
-        print('Couldn not parse unit');
-        return;
-      }
-      db.update('recipe', {'ingredient_amount':newNumber, 'ingredient_unit': newUnit}, where:'recipe_id=?', whereArgs: [recipeId]);
-      print('Db updated ingredient amount');
-    }
-    return SingleChildScrollView(
-        child: DataTable(
-            dataRowMinHeight: 30,
-            dataRowMaxHeight: 40,
-            headingRowHeight: 40,
-            columns: ["Ingredient", "Amount"]
-                .map((i) => DataColumn(
-                      label: Expanded(
-                          child: Text(i,
-                              style: TextStyle(
-                                  fontStyle: FontStyle.italic,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onPrimaryContainer))),
-                    ))
-                .toList(),
-            rows: widget.ingredientController.asMap().entries.map((entry) {
-              int idx = entry.key;
-              List<TextEditingController> i = entry.value;
-              return DataRow(
-                selected: widget.selected[idx],
-                onSelectChanged: (bool? value) {
-                  setState(() {
-                    widget.selected[idx] = value!;
-                    // print(Theme.of(context).dataTableTheme.dataTextStyle);
-                  });
-                },
-                cells: [
-                  DataCell(TextField(
-                      controller: i[0],
-                      maxLines: 2,
-                      textInputAction: TextInputAction.done,
-                      decoration:
-                          const InputDecoration(border: InputBorder.none),
-                      onEditingComplete: () {
-                        DbUpdateIngredientName(idx);
-                        FocusScope.of(context).unfocus(); 
-                        },
-                      style: TextStyle(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onPrimaryContainer))),
-                  DataCell(TextField(
-                    controller: i[1],
-                    decoration: const InputDecoration(border: InputBorder.none),
-                    onEditingComplete: () {
-                      DbUpdateIngredientAmount(idx, widget.recipeId);
-                      FocusScope.of(context).unfocus(); 
-                    },
-                    style: TextStyle(
-                        color:
-                            Theme.of(context).colorScheme.onPrimaryContainer),
-                  )),
-                ],
-              );
-            }).toList()));
   }
 }
 
@@ -300,14 +210,4 @@ RichText translateStepsToRichText(
               color: Theme.of(context).colorScheme.onPrimaryContainer));
     }
   }).toList()));
-}
-
-String doubleToString(double? n) {
-  if (n == null) {
-    return "-"; //stuff like pinch, garnish, to taste
-  } else if (n % 1 != 0) {
-    return n.toString();
-  } else {
-    return n.round().toString();
-  }
 }
