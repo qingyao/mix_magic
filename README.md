@@ -1,4 +1,9 @@
 # mix_magic
+<div style="float: right;">
+  <img src="images/screenshot1.png" width="200" alt="Search"/>
+  <img src="images/screenshot2.png" width="200" alt="Check Row"/>
+  <img src="images/screenshot3.png" width="200" alt="Edit"/>
+</div>
 
 This is a multi-platform App to perform multiple ingredient search in the existing recipes.
 - tested for iOS and android, also should work on macOS and Windows App

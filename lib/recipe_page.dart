@@ -34,8 +34,6 @@ class _RecipePageState extends State<RecipePage> {
   @override
   void initState() {
     super.initState();
-    editIngredientTable = EditIngredientTable(
-        recipeId: widget.recipeId, ingredientDetail: widget.ingredientDetail);
     ingredientTable = IngredientTable(
       recipeId: widget.recipeId,
       ingredientDetail: widget.ingredientDetail,
@@ -45,23 +43,37 @@ class _RecipePageState extends State<RecipePage> {
 
   @override
   Widget build(BuildContext context) {
-    void toggleEdit() {
-      // current state is reading
+    final db = Provider.of<DatabaseProvider>(context).database;
+
+    void toggleEdit() async {
+      
       if (buttonText == 'Edit') {
+        // current state is reading
+
+        editIngredientTable = EditIngredientTable(
+            recipeId: widget.recipeId,
+            ingredientDetail: widget.ingredientDetail);
         setState(() {
           buttonText = 'Done';
           table = editIngredientTable;
-          buttonIcon = const Icon(Icons.download_done);
+          buttonIcon = const Icon(Icons.check);
         });
       } else {
         // current state is editing
-        // TODO trigger child callback (save whole table) and here load from database the new ingredientDetail
+
+        var ingredientDetail = await getIngredientDetail(db, widget.recipeId);
+        // print("I'm updating ingredient table");
         setState(() {
+          widget.ingredientDetail = ingredientDetail;
+          ingredientTable = IngredientTable(
+            recipeId: widget.recipeId,
+            ingredientDetail: widget.ingredientDetail,
+          );
           buttonText = 'Edit';
           table = ingredientTable;
-          buttonIcon =  const Icon(Icons.edit);
-          
+          buttonIcon = const Icon(Icons.edit);
         });
+        
       }
     }
 
@@ -107,9 +119,9 @@ class _RecipePageState extends State<RecipePage> {
                           ),
                         ),
                         IconButton(
-                                onPressed: toggleEdit,
-                                icon: buttonIcon,
-                              ) //label:Text(buttonText)
+                          onPressed: toggleEdit,
+                          icon: buttonIcon,
+                        ) //label:Text(buttonText)
                       ],
                     ),
                     Expanded(

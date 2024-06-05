@@ -70,6 +70,10 @@ class _AddRecipePageState extends State<AddRecipePage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Text('You can upload a picture of a recipe or paste a text with recipe name, ingredients and steps (optionally upload a picture for the logo). Then you can click Next to let AI generate the formatted recipe to save in your recipe book!'),
+                ),
                 _imageFile != null
                     ? Expanded(
                         child: ClipRRect(
@@ -84,7 +88,7 @@ class _AddRecipePageState extends State<AddRecipePage> {
                 SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: _cropImage,
-                  child: Text('Crop & Compress Image'),
+                  child: Text('Crop Logo'),
                 ),
               ],
             ),

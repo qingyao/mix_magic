@@ -38,9 +38,9 @@ class _EditIngredientTableState extends State<EditIngredientTable> {
   Widget build(BuildContext context) {
     final db = Provider.of<DatabaseProvider>(context).database;
 
-    void DbUpdateIngredientName(int idx) {
+    void DbUpdateIngredientName(String input_val, int idx) {
       var oldName = widget.ingredientDetail[idx].name;
-      var data = {'ingredient_name': ingredientController[idx][0].text};
+      var data = {'ingredient_name': input_val};
       db.update('recipe', data,
           where: 'ingredient_name=?', whereArgs: [oldName]);
       db.update('ingredient', data,
@@ -48,8 +48,8 @@ class _EditIngredientTableState extends State<EditIngredientTable> {
       print('Db updated ingredient name');
     }
 
-    void DbUpdateIngredientAmount(int idx, int recipeId) async {
-      var newAmount = ingredientController[idx][1].text.trim();
+    void DbUpdateIngredientAmount(String input_val, int idx, int recipeId) async {
+      var newAmount = input_val.trim();
       var ingredientName = ingredientController[idx][0].text;
 
       double newNumber;
@@ -116,8 +116,8 @@ class _EditIngredientTableState extends State<EditIngredientTable> {
                       textInputAction: TextInputAction.done,
                       decoration:
                           const InputDecoration(border: InputBorder.none),
-                      onEditingComplete: () {
-                        DbUpdateIngredientName(idx);
+                      onChanged: (input) {
+                        DbUpdateIngredientName(input, idx);
                         FocusScope.of(context).unfocus();
                       },
                       style: TextStyle(
@@ -127,8 +127,8 @@ class _EditIngredientTableState extends State<EditIngredientTable> {
                   DataCell(TextField(
                     controller: i[1],
                     decoration: const InputDecoration(border: InputBorder.none),
-                    onEditingComplete: () {
-                      DbUpdateIngredientAmount(idx, widget.recipeId);
+                    onChanged: (input) {
+                      DbUpdateIngredientAmount(input, idx, widget.recipeId);
                       FocusScope.of(context).unfocus();
                     },
                     style: TextStyle(
